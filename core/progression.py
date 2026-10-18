@@ -8,7 +8,7 @@ import random
 import json
 from pathlib import Path
 
-from entities import Card, RunState, Biome, Rarity, StatusEffect, CardDatabase
+from core.entities import Card, RunState, Biome, Rarity, StatusEffect, CardDatabase
 
 
 class NodeType(Enum):

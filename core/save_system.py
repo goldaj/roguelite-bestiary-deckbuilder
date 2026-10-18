@@ -12,8 +12,8 @@ from datetime import datetime
 import hashlib
 import os
 
-from entities import RunState, Card, CombatState, Biome, Rarity, StatusEffect, Keyword
-from progression import ActMap, MapNode, NodeType
+from core.entities import RunState, Card, CombatState, Biome, Rarity, StatusEffect, Keyword
+from core.progression import ActMap, MapNode, NodeType
 
 
 class SaveVersion:

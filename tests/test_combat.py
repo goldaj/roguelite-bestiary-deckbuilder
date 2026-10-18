@@ -5,7 +5,7 @@ import pytest
 from unittest.mock import Mock, patch
 import random
 
-from bestiaire.core.entities import Card, CombatState, StatusEffect, Keyword, Biome, Rarity
+from core.entities import Card, CombatState, StatusEffect, Keyword, Biome, Rarity
 from core.combat import CombatResolver, TargetingRule
 
 

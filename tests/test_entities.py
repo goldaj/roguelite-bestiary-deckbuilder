@@ -5,7 +5,7 @@ import pytest
 from hypothesis import given, strategies as st
 from typing import List
 
-from bestiaire.core.entities import (
+from core.entities import (
     Card, StatusEffect, Keyword, Rarity, Biome,
     CombatState, RunState, CardDatabase
 )

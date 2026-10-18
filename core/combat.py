@@ -7,7 +7,7 @@ from enum import Enum, auto
 import random
 from copy import deepcopy
 
-from entities import (
+from core.entities import (
     Card, CombatState, StatusEffect, Keyword,
     Biome, Rarity
 )

@@ -10,8 +10,8 @@ from collections import defaultdict
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from entities import Card, Biome, Rarity, StatusEffect, Keyword
-from combat import CombatResolver, CombatState
+from core.entities import Card, Biome, Rarity, StatusEffect, Keyword
+from core.combat import CombatResolver, CombatState
 
 
 @dataclass
@@ -505,7 +505,7 @@ if __name__ == "__main__":
     # Ajouter le chemin parent
     sys.path.append(str(Path(__file__).parent.parent))
 
-    from entities import CardDatabase
+    from core.entities import CardDatabase
 
     print("🎯 Lancement du simulateur d'équilibrage...")
 

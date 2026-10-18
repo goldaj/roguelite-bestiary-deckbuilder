@@ -8,6 +8,28 @@ from pathlib import Path
 this_directory = Path(__file__).parent
 long_description = (this_directory / "README.md").read_text(encoding='utf-8')
 
+# config.py
+"""Configuration globale du jeu"""
+
+# Display
+SCREEN_WIDTH = 1280
+SCREEN_HEIGHT = 720
+FPS = 60
+
+# Gameplay
+DEFAULT_ENERGY = 3
+MAX_HAND_SIZE = 10
+STARTING_DECK_SIZE = 12
+
+# Cards
+CARD_WIDTH = 90
+CARD_HEIGHT = 126
+
+# Colors
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+DARK_GRAY = (40, 40, 40)
+
 setup(
     name="bestiaire-roguelite",
     version="1.0.0",

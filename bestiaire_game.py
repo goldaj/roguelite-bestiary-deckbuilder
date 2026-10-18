@@ -1,0 +1,970 @@
+#!/usr/bin/env python3
+"""
+BESTIAIRE: Écorces & Échos
+Jeu complet fonctionnel - Version intégrée
+"""
+
+import pygame
+import random
+import math
+import json
+from enum import Enum, auto
+from dataclasses import dataclass, field
+from typing import List, Dict, Optional, Tuple, Any
+from pathlib import Path
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+
+SCREEN_WIDTH = 1280
+SCREEN_HEIGHT = 720
+FPS = 60
+
+# Couleurs
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+DARK_GRAY = (40, 40, 40)
+MID_GRAY = (80, 80, 80)
+LIGHT_GRAY = (160, 160, 160)
+GREEN = (100, 200, 100)
+RED = (200, 100, 100)
+BLUE = (100, 100, 200)
+GOLD = (255, 215, 0)
+ORANGE = (255, 150, 50)
+PURPLE = (150, 100, 200)
+
+# Configuration gameplay
+PLAYER_HP = 20
+ENEMY_HP_BASE = 15
+HAND_SIZE_INITIAL = 5
+ENERGY_PER_TURN = 3
+BOARD_SLOTS = 4
+
+
+# ============================================================================
+# MODÈLES DE DONNÉES
+# ============================================================================
+
+class StatusEffect(Enum):
+    """Effets permanents"""
+    VENIN = "venin"  # Dégâts au début du combat
+    BRULURE = "brulure"  # Dégâts à la fin du combat
+    SAIGNEMENT = "saignement"  # Dégâts quand attaque
+    FRACTURE = "fracture"  # -1 ATQ permanent
+    MALEDICTION = "malediction"  # -1 Vitesse au début
+    EROSION = "erosion"  # -1 DUR à chaque nœud
+
+
+class Keyword(Enum):
+    """Mots-clés des cartes"""
+    TIRAILLEUR = auto()  # +1 ATQ contre nouvelles invocations
+    GARDE = auto()  # Protège la ligne arrière
+    VOL = auto()  # Ignore effets de terrain
+    PERCEE = auto()  # Traverse les boucliers
+    BOND = auto()  # Cible le plus faible
+    CARAPACE = auto()  # Réduit l'ATQ de l'attaquant
+    ETHEREE = auto()  # Ne peut être ciblé au corps-à-corps
+
+
+@dataclass
+class Card:
+    """Carte de créature"""
+    id: str
+    name: str
+    cost: int
+    base_atk: int
+    base_dur: int
+    base_spd: int
+    keywords: List[Keyword] = field(default_factory=list)
+    description: str = ""
+    color: Tuple[int, int, int] = field(default_factory=lambda: (100, 100, 100))
+
+    # État permanent durant la run
+    current_dur: int = 0
+    current_atk: int = 0
+    current_spd: int = 0
+    shields: int = 0
+    permanent_statuses: Dict[StatusEffect, int] = field(default_factory=dict)
+
+    def __post_init__(self):
+        if self.current_dur == 0:
+            self.current_dur = self.base_dur
+        if self.current_atk == 0:
+            self.current_atk = self.base_atk
+        if self.current_spd == 0:
+            self.current_spd = self.base_spd
+
+    def take_damage(self, amount: int) -> bool:
+        """Applique des dégâts permanents"""
+        while amount > 0 and self.shields > 0:
+            self.shields -= 1
+            amount -= 1
+
+        self.current_dur -= amount
+        return self.current_dur > 0
+
+    def apply_status(self, effect: StatusEffect, value: int):
+        """Applique une altération permanente"""
+        if effect not in self.permanent_statuses:
+            self.permanent_statuses[effect] = 0
+        self.permanent_statuses[effect] += value
+
+        if effect == StatusEffect.FRACTURE:
+            self.current_atk = max(1, self.current_atk - value)
+
+    def get_effective_atk(self) -> int:
+        """Retourne l'ATQ effective"""
+        return max(0, self.current_atk)
+
+    def clone(self) -> 'Card':
+        """Crée une copie de la carte"""
+        new_card = Card(
+            id=self.id,
+            name=self.name,
+            cost=self.cost,
+            base_atk=self.base_atk,
+            base_dur=self.base_dur,
+            base_spd=self.base_spd,
+            keywords=self.keywords.copy(),
+            description=self.description,
+            color=self.color
+        )
+        new_card.current_atk = self.current_atk
+        new_card.current_dur = self.current_dur
+        new_card.current_spd = self.current_spd
+        new_card.shields = self.shields
+        new_card.permanent_statuses = self.permanent_statuses.copy()
+        return new_card
+
+
+# ============================================================================
+# CARTES DU JEU
+# ============================================================================
+
+def create_all_cards() -> List[Card]:
+    """Crée toutes les cartes du jeu"""
+    cards = [
+        # Forêt
+        Card("forest_frog", "Grenouille Épineuse", 1, 1, 3, 2,
+             [Keyword.TIRAILLEUR], "Punition d'invocations", (100, 150, 100)),
+        Card("forest_spider", "Mygale d'Azur", 1, 1, 4, 1,
+             [], "Venin à l'attaque", (100, 120, 150)),
+        Card("forest_mantis", "Mante Prédatrice", 2, 3, 3, 2,
+             [Keyword.PERCEE], "Contourne les boucliers", (120, 150, 100)),
+        Card("forest_toad", "Crapaud Toxique", 2, 1, 5, 1,
+             [], "Zone de danger", (80, 140, 80)),
+        Card("forest_boar", "Sanglier Lierre", 1, 2, 3, 1,
+             [Keyword.GARDE], "Ligne de front", (100, 120, 80)),
+
+        # Dunes
+        Card("dunes_fennec", "Fennec Solaire", 1, 2, 2, 3,
+             [], "Initiative haute", (200, 150, 100)),
+        Card("dunes_scorpion", "Scorpion des Braises", 1, 1, 3, 2,
+             [], "Brûlure à l'attaque", (180, 100, 80)),
+        Card("dunes_hyena", "Hyène Rieuse", 2, 3, 3, 2,
+             [], "Combo feu", (200, 130, 100)),
+        Card("dunes_sphinx", "Sphinx Érodant", 3, 3, 5, 2,
+             [], "Érosion permanente", (180, 150, 120)),
+
+        # Falaises
+        Card("cliffs_seagull", "Goéland Filou", 1, 1, 3, 3,
+             [Keyword.VOL, Keyword.TIRAILLEUR], "Punition d'invocs", (150, 150, 180)),
+        Card("cliffs_bat", "Chauve-Souris Écho", 1, 2, 2, 3,
+             [Keyword.ETHEREE], "Intouchable CAC", (120, 120, 160)),
+        Card("cliffs_hawk", "Harrier Gris", 2, 3, 3, 3,
+             [Keyword.VOL, Keyword.BOND], "Sniper mobile", (140, 140, 170)),
+
+        # Fleuve
+        Card("river_piranha", "Piranha Strié", 1, 2, 2, 3,
+             [], "Glass-cannon dégressif", (100, 120, 180)),
+        Card("river_lamprey", "Lamproie", 1, 1, 4, 1,
+             [], "Saignement à l'attaque", (80, 100, 160)),
+        Card("river_turtle", "Tortue de Vase", 1, 1, 5, 1,
+             [Keyword.CARAPACE], "Mur vivant", (100, 140, 160)),
+        Card("river_catfish", "Silure Noir", 2, 3, 3, 1,
+             [], "Synergie saignement", (80, 80, 140)),
+
+        # Volcan
+        Card("volcano_gecko", "Gekko Fumarole", 1, 2, 2, 3,
+             [], "Adaptatif terrain lave", (180, 100, 100)),
+        Card("volcano_mastiff", "Molosse Cendreux", 1, 2, 3, 2,
+             [], "Standard feu", (160, 80, 80)),
+        Card("volcano_salamander", "Salamandre Sombre", 2, 2, 4, 2,
+             [], "Timing bouclier", (140, 60, 60)),
+        Card("volcano_dragon", "Dragon Cendré", 3, 4, 6, 2,
+             [Keyword.VOL], "Propagation lente", (200, 50, 50)),
+
+        # Ruines
+        Card("ruins_rat", "Rat des Cryptes", 1, 2, 2, 2,
+             [Keyword.TIRAILLEUR], "Flex", (150, 100, 180)),
+        Card("ruins_gargoyle", "Gargouille Fissurée", 1, 1, 4, 1,
+             [], "Malédiction à l'attaque", (140, 100, 170)),
+        Card("ruins_specter", "Spectre Archiviste", 1, 1, 3, 2,
+             [Keyword.ETHEREE], "Synergie malédiction", (160, 120, 200)),
+        Card("ruins_golem", "Golem Érodé", 2, 3, 4, 1,
+             [], "Usure hors combat", (130, 90, 160)),
+
+        # Neutres
+        Card("neutral_sparrow", "Moineau Hargneux", 0, 1, 1, 3,
+             [Keyword.VOL, Keyword.TIRAILLEUR], "Filler agressif", (140, 140, 140)),
+        Card("neutral_rat", "Rat Éclaireur", 0, 1, 2, 3,
+             [], "Tempo micro", (120, 120, 120)),
+        Card("neutral_dog", "Chien Errant", 1, 2, 2, 2,
+             [Keyword.BOND], "Presse la faiblesse", (130, 130, 130)),
+        Card("neutral_crab", "Crabe de Rivage", 1, 1, 3, 1,
+             [Keyword.CARAPACE], "Mur low-cost", (100, 100, 120)),
+        Card("neutral_wolf", "Loup Solitaire", 2, 3, 3, 2,
+             [], "Minimalisme", (110, 110, 110)),
+        Card("neutral_crow", "Corbeau de Carogne", 2, 2, 3, 3,
+             [Keyword.BOND], "Finisher", (80, 80, 80)),
+    ]
+    return cards
+
+
+# ============================================================================
+# SYSTÈME DE COMBAT
+# ============================================================================
+
+@dataclass
+class CombatUnit:
+    """Unité sur le terrain"""
+    card: Card
+    position: int
+    is_player: bool
+    has_attacked: bool = False
+
+
+class CombatState:
+    """État du combat"""
+
+    def __init__(self):
+        self.player_board: List[Optional[CombatUnit]] = [None] * BOARD_SLOTS
+        self.enemy_board: List[Optional[CombatUnit]] = [None] * BOARD_SLOTS
+        self.player_hp = PLAYER_HP
+        self.enemy_hp = ENEMY_HP_BASE
+        self.turn = 1
+        self.energy = ENERGY_PER_TURN
+        self.combat_log: List[str] = []
+
+    def add_unit(self, card: Card, position: int, is_player: bool) -> bool:
+        """Ajoute une unité sur le terrain"""
+        board = self.player_board if is_player else self.enemy_board
+        if board[position] is None:
+            board[position] = CombatUnit(card, position, is_player)
+            return True
+        return False
+
+    def get_all_units(self) -> List[CombatUnit]:
+        """Retourne toutes les unités vivantes"""
+        units = []
+        for unit in self.player_board + self.enemy_board:
+            if unit and unit.card.current_dur > 0:
+                units.append(unit)
+        return units
+
+    def resolve_combat_turn(self):
+        """Résout un tour de combat"""
+        units = self.get_all_units()
+        # Trier par vitesse décroissante
+        units.sort(key=lambda u: u.card.current_spd, reverse=True)
+
+        for unit in units:
+            if unit.card.current_dur <= 0:
+                continue
+
+            # Trouver une cible
+            target = self.find_target(unit)
+            if target:
+                self.attack(unit, target)
+            else:
+                # Attaque directe au joueur/ennemi
+                if unit.is_player:
+                    self.enemy_hp -= unit.card.get_effective_atk()
+                    self.combat_log.append(f"{unit.card.name} inflige {unit.card.get_effective_atk()} dégâts directs!")
+                else:
+                    self.player_hp -= unit.card.get_effective_atk()
+                    self.combat_log.append(f"{unit.card.name} vous inflige {unit.card.get_effective_atk()} dégâts!")
+
+        # Nettoyer les morts
+        self.cleanup_dead_units()
+
+        # Appliquer les effets de fin de tour
+        self.apply_end_turn_effects()
+
+        self.turn += 1
+        self.energy = ENERGY_PER_TURN
+
+    def find_target(self, attacker: CombatUnit) -> Optional[CombatUnit]:
+        """Trouve une cible pour l'attaquant"""
+        targets = self.enemy_board if attacker.is_player else self.player_board
+
+        # Bond - cible le plus faible
+        if Keyword.BOND in attacker.card.keywords:
+            weakest = None
+            for target in targets:
+                if target and target.card.current_dur > 0:
+                    if not weakest or target.card.current_dur < weakest.card.current_dur:
+                        weakest = target
+            return weakest
+
+        # Cible standard - en face
+        if attacker.position < len(targets):
+            target = targets[attacker.position]
+            if target and target.card.current_dur > 0:
+                return target
+
+        # Première cible disponible
+        for target in targets:
+            if target and target.card.current_dur > 0:
+                return target
+
+        return None
+
+    def attack(self, attacker: CombatUnit, defender: CombatUnit):
+        """Effectue une attaque"""
+        damage = attacker.card.get_effective_atk()
+
+        # Percée ignore les boucliers
+        if Keyword.PERCEE in attacker.card.keywords:
+            defender.card.current_dur -= damage
+        else:
+            defender.card.take_damage(damage)
+
+        self.combat_log.append(f"{attacker.card.name} attaque {defender.card.name} pour {damage} dégâts!")
+
+        # Appliquer les effets
+        if random.random() < 0.3:  # 30% de chance d'appliquer un statut
+            effects = list(StatusEffect)
+            effect = random.choice(effects)
+            defender.card.apply_status(effect, 1)
+            self.combat_log.append(f"{defender.card.name} reçoit {effect.value}!")
+
+    def cleanup_dead_units(self):
+        """Enlève les unités mortes"""
+        for i in range(BOARD_SLOTS):
+            if self.player_board[i] and self.player_board[i].card.current_dur <= 0:
+                self.combat_log.append(f"{self.player_board[i].card.name} est détruit!")
+                self.player_board[i] = None
+            if self.enemy_board[i] and self.enemy_board[i].card.current_dur <= 0:
+                self.combat_log.append(f"{self.enemy_board[i].card.name} est détruit!")
+                self.enemy_board[i] = None
+
+    def apply_end_turn_effects(self):
+        """Applique les effets de fin de tour"""
+        for unit in self.get_all_units():
+            # Brûlure
+            if StatusEffect.BRULURE in unit.card.permanent_statuses:
+                damage = unit.card.permanent_statuses[StatusEffect.BRULURE]
+                unit.card.take_damage(damage)
+                self.combat_log.append(f"{unit.card.name} brûle pour {damage} dégâts!")
+
+    def is_combat_over(self) -> Optional[str]:
+        """Vérifie si le combat est terminé"""
+        if self.player_hp <= 0:
+            return "defeat"
+        if self.enemy_hp <= 0:
+            return "victory"
+        return None
+
+
+# ============================================================================
+# INTERFACE DE JEU
+# ============================================================================
+
+class BestiaireGame:
+    """Classe principale du jeu"""
+
+    def __init__(self):
+        pygame.init()
+
+        # Configuration de l'écran
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        pygame.display.set_caption("Bestiaire: Écorces & Échos")
+
+        # Police
+        self.font = pygame.font.Font(None, 24)
+        self.big_font = pygame.font.Font(None, 48)
+        self.small_font = pygame.font.Font(None, 18)
+
+        # Horloge
+        self.clock = pygame.time.Clock()
+        self.running = True
+
+        # État du jeu
+        self.state = "menu"  # menu, combat, victory, defeat, map
+        self.cards = create_all_cards()
+
+        # Deck et progression
+        self.player_deck: List[Card] = []
+        self.enemy_deck: List[Card] = []
+        self.hand: List[Card] = []
+        self.combat_state: Optional[CombatState] = None
+        self.stage = 1
+        self.max_stages = 10
+
+        # Variables UI
+        self.selected_card: Optional[int] = None
+        self.hover_slot: Optional[int] = None
+        self.animation_timer = 0
+
+        # Particules
+        self.particles: List[Dict] = []
+
+    def start_new_run(self):
+        """Démarre une nouvelle run"""
+        # Créer le deck du joueur (10 cartes aléatoires)
+        self.player_deck = []
+        for _ in range(12):
+            card = random.choice(self.cards).clone()
+            self.player_deck.append(card)
+
+        self.stage = 1
+        self.start_combat()
+
+    def start_combat(self):
+        """Démarre un nouveau combat"""
+        self.state = "combat"
+        self.combat_state = CombatState()
+
+        # Ajuster la difficulté
+        is_boss = (self.stage == self.max_stages)
+        enemy_hp = ENEMY_HP_BASE + (self.stage - 1) * 3
+        if is_boss:
+            enemy_hp += 20
+        self.combat_state.enemy_hp = enemy_hp
+
+        # Placer des ennemis
+        enemy_count = min(2 + self.stage // 3, BOARD_SLOTS)
+        for i in range(enemy_count):
+            enemy_card = random.choice(self.cards).clone()
+            # Bonus de stats pour les ennemis
+            enemy_card.current_atk += self.stage // 2
+            enemy_card.current_dur += self.stage
+            self.combat_state.add_unit(enemy_card, i, False)
+
+        # Piocher la main initiale
+        self.hand = []
+        deck_copy = self.player_deck.copy()
+        random.shuffle(deck_copy)
+        for i in range(min(HAND_SIZE_INITIAL, len(deck_copy))):
+            self.hand.append(deck_copy[i])
+
+        # Log
+        self.combat_state.combat_log.append(f"=== Combat {self.stage} {'(BOSS)' if is_boss else ''} ===")
+
+    def handle_events(self):
+        """Gère les événements"""
+        mouse_pos = pygame.mouse.get_pos()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    if self.state == "combat":
+                        self.state = "menu"
+                    else:
+                        self.running = False
+
+                elif event.key == pygame.K_SPACE:
+                    if self.state == "menu":
+                        self.start_new_run()
+                    elif self.state in ["victory", "defeat"]:
+                        self.state = "menu"
+
+                elif event.key == pygame.K_RETURN and self.state == "combat":
+                    self.end_turn()
+
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Clic gauche
+                    self.handle_click(mouse_pos)
+
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 1 and self.selected_card is not None:
+                    self.handle_card_drop(mouse_pos)
+
+            elif event.type == pygame.MOUSEMOTION:
+                self.handle_hover(mouse_pos)
+
+    def handle_click(self, pos):
+        """Gère les clics"""
+        if self.state == "menu":
+            # Bouton nouvelle partie
+            new_game_rect = pygame.Rect(SCREEN_WIDTH // 2 - 150, 300, 300, 60)
+            if new_game_rect.collidepoint(pos):
+                self.start_new_run()
+
+        elif self.state == "combat":
+            # Sélection de carte dans la main
+            for i, card in enumerate(self.hand):
+                card_rect = self.get_hand_card_rect(i)
+                if card_rect.collidepoint(pos):
+                    if self.combat_state.energy >= card.cost:
+                        self.selected_card = i
+                    return
+
+            # Bouton fin de tour
+            end_turn_rect = pygame.Rect(SCREEN_WIDTH - 180, SCREEN_HEIGHT - 80, 160, 50)
+            if end_turn_rect.collidepoint(pos):
+                self.end_turn()
+
+    def handle_card_drop(self, pos):
+        """Gère le drop d'une carte"""
+        if self.selected_card is None or self.state != "combat":
+            return
+
+        # Vérifier si on drop sur un slot
+        for i in range(BOARD_SLOTS):
+            slot_rect = self.get_board_slot_rect(i, True)
+            if slot_rect.collidepoint(pos):
+                if self.combat_state.player_board[i] is None:
+                    card = self.hand.pop(self.selected_card)
+                    self.combat_state.add_unit(card, i, True)
+                    self.combat_state.energy -= card.cost
+                    self.add_particle_burst(slot_rect.centerx, slot_rect.centery, card.color)
+                    self.combat_state.combat_log.append(f"Vous jouez {card.name}")
+                break
+
+        self.selected_card = None
+
+    def handle_hover(self, pos):
+        """Gère le survol"""
+        self.hover_slot = None
+
+        if self.state == "combat":
+            for i in range(BOARD_SLOTS):
+                slot_rect = self.get_board_slot_rect(i, True)
+                if slot_rect.collidepoint(pos):
+                    self.hover_slot = i
+                    break
+
+    def end_turn(self):
+        """Termine le tour du joueur"""
+        if self.state != "combat":
+            return
+
+        # Résoudre le combat
+        self.combat_state.resolve_combat_turn()
+
+        # Vérifier la fin du combat
+        result = self.combat_state.is_combat_over()
+        if result == "victory":
+            self.stage += 1
+            if self.stage > self.max_stages:
+                self.state = "victory"
+            else:
+                # Prochainement, on affichera une carte
+                # Pour l'instant, on lance directement le combat suivant
+                self.start_combat()
+        elif result == "defeat":
+            self.state = "defeat"
+
+    def get_hand_card_rect(self, index: int) -> pygame.Rect:
+        """Retourne le rectangle d'une carte dans la main"""
+        card_width = 120
+        card_height = 160
+        spacing = 10
+        total_width = len(self.hand) * (card_width + spacing) - spacing
+        start_x = (SCREEN_WIDTH - total_width) // 2
+        y = SCREEN_HEIGHT - card_height - 20
+        x = start_x + index * (card_width + spacing)
+        return pygame.Rect(x, y, card_width, card_height)
+
+    def get_board_slot_rect(self, index: int, is_player: bool) -> pygame.Rect:
+        """Retourne le rectangle d'un slot du plateau"""
+        slot_width = 140
+        slot_height = 180
+        spacing = 20
+        total_width = BOARD_SLOTS * (slot_width + spacing) - spacing
+        start_x = (SCREEN_WIDTH - total_width) // 2
+        x = start_x + index * (slot_width + spacing)
+        y = 320 if is_player else 80
+        return pygame.Rect(x, y, slot_width, slot_height)
+
+    def add_particle_burst(self, x, y, color):
+        """Ajoute une explosion de particules"""
+        for _ in range(20):
+            angle = random.uniform(0, math.pi * 2)
+            speed = random.uniform(50, 150)
+            self.particles.append({
+                'x': x,
+                'y': y,
+                'vx': math.cos(angle) * speed,
+                'vy': math.sin(angle) * speed,
+                'life': 1.0,
+                'color': color,
+                'size': random.randint(2, 6)
+            })
+
+    def update_particles(self, dt):
+        """Met à jour les particules"""
+        for particle in self.particles[:]:
+            particle['x'] += particle['vx'] * dt
+            particle['y'] += particle['vy'] * dt
+            particle['life'] -= dt * 2
+            particle['vy'] += 300 * dt  # Gravité
+
+            if particle['life'] <= 0:
+                self.particles.remove(particle)
+
+    def draw_menu(self):
+        """Dessine le menu principal"""
+        self.screen.fill(DARK_GRAY)
+
+        # Titre
+        title = self.big_font.render("BESTIAIRE", True, WHITE)
+        title_rect = title.get_rect(center=(SCREEN_WIDTH // 2, 150))
+        self.screen.blit(title, title_rect)
+
+        subtitle = self.font.render("Écorces & Échos", True, LIGHT_GRAY)
+        subtitle_rect = subtitle.get_rect(center=(SCREEN_WIDTH // 2, 200))
+        self.screen.blit(subtitle, subtitle_rect)
+
+        # Bouton nouvelle partie
+        button_rect = pygame.Rect(SCREEN_WIDTH // 2 - 150, 300, 300, 60)
+        pygame.draw.rect(self.screen, GREEN, button_rect, border_radius=10)
+        pygame.draw.rect(self.screen, WHITE, button_rect, 3, border_radius=10)
+
+        button_text = self.font.render("NOUVELLE PARTIE", True, WHITE)
+        button_text_rect = button_text.get_rect(center=button_rect.center)
+        self.screen.blit(button_text, button_text_rect)
+
+        # Instructions
+        instructions = [
+            "Chaque dégât est permanent pour toute la run",
+            "Survivez à 10 combats pour gagner",
+            "Le dernier combat est un BOSS",
+            "",
+            "ESC - Retour au menu",
+            "ENTRÉE - Fin du tour"
+        ]
+
+        y = 450
+        for line in instructions:
+            text = self.small_font.render(line, True, LIGHT_GRAY)
+            text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, y))
+            self.screen.blit(text, text_rect)
+            y += 25
+
+    def draw_combat(self):
+        """Dessine le combat"""
+        self.screen.fill(DARK_GRAY)
+
+        # Infos du combat
+        stage_text = f"Combat {self.stage}/{self.max_stages}"
+        if self.stage == self.max_stages:
+            stage_text += " (BOSS)"
+            color = GOLD
+        else:
+            color = WHITE
+        text = self.font.render(stage_text, True, color)
+        self.screen.blit(text, (20, 20))
+
+        # HP
+        player_hp_text = f"Vos PV: {self.combat_state.player_hp}"
+        enemy_hp_text = f"PV Ennemi: {self.combat_state.enemy_hp}"
+
+        hp_color = GREEN if self.combat_state.player_hp > 10 else RED
+        text = self.font.render(player_hp_text, True, hp_color)
+        self.screen.blit(text, (20, 50))
+
+        hp_color = GREEN if self.combat_state.enemy_hp > 10 else RED
+        text = self.font.render(enemy_hp_text, True, hp_color)
+        self.screen.blit(text, (20, 80))
+
+        # Énergie
+        energy_text = f"Énergie: {self.combat_state.energy}/{ENERGY_PER_TURN}"
+        text = self.font.render(energy_text, True, BLUE)
+        self.screen.blit(text, (20, 110))
+
+        # Plateau ennemi
+        for i in range(BOARD_SLOTS):
+            rect = self.get_board_slot_rect(i, False)
+            pygame.draw.rect(self.screen, MID_GRAY, rect, border_radius=10)
+            pygame.draw.rect(self.screen, RED, rect, 2, border_radius=10)
+
+            unit = self.combat_state.enemy_board[i]
+            if unit:
+                self.draw_unit_card(rect, unit.card, False)
+
+        # Plateau joueur
+        for i in range(BOARD_SLOTS):
+            rect = self.get_board_slot_rect(i, True)
+
+            # Highlight si hover avec carte
+            if self.hover_slot == i and self.selected_card is not None:
+                if self.combat_state.player_board[i] is None:
+                    pygame.draw.rect(self.screen, GREEN, rect, border_radius=10)
+                else:
+                    pygame.draw.rect(self.screen, MID_GRAY, rect, border_radius=10)
+            else:
+                pygame.draw.rect(self.screen, MID_GRAY, rect, border_radius=10)
+
+            pygame.draw.rect(self.screen, BLUE, rect, 2, border_radius=10)
+
+            unit = self.combat_state.player_board[i]
+            if unit:
+                self.draw_unit_card(rect, unit.card, True)
+
+        # Main du joueur
+        for i, card in enumerate(self.hand):
+            if i == self.selected_card:
+                continue  # On la dessine après pour qu'elle soit au-dessus
+
+            rect = self.get_hand_card_rect(i)
+            self.draw_hand_card(rect, card)
+
+        # Carte sélectionnée (suit la souris)
+        if self.selected_card is not None:
+            mouse_x, mouse_y = pygame.mouse.get_pos()
+            rect = pygame.Rect(mouse_x - 60, mouse_y - 80, 120, 160)
+            self.draw_hand_card(rect, self.hand[self.selected_card])
+
+        # Bouton fin de tour
+        button_rect = pygame.Rect(SCREEN_WIDTH - 180, SCREEN_HEIGHT - 80, 160, 50)
+        pygame.draw.rect(self.screen, GREEN, button_rect, border_radius=10)
+        pygame.draw.rect(self.screen, WHITE, button_rect, 3, border_radius=10)
+
+        button_text = self.font.render("FIN DU TOUR", True, WHITE)
+        button_text_rect = button_text.get_rect(center=button_rect.center)
+        self.screen.blit(button_text, button_text_rect)
+
+        # Journal de combat (derniers messages)
+        y = SCREEN_HEIGHT - 250
+        for message in self.combat_state.combat_log[-5:]:
+            text = self.small_font.render(message, True, LIGHT_GRAY)
+            self.screen.blit(text, (SCREEN_WIDTH - 400, y))
+            y += 20
+
+    def draw_unit_card(self, rect: pygame.Rect, card: Card, is_player: bool):
+        """Dessine une carte unité sur le plateau"""
+        # Fond
+        color = card.color if is_player else tuple(c // 2 for c in card.color)
+        pygame.draw.rect(self.screen, color, rect, border_radius=10)
+        pygame.draw.rect(self.screen, WHITE, rect, 2, border_radius=10)
+
+        # Nom
+        name = card.name[:12] + "..." if len(card.name) > 12 else card.name
+        text = self.small_font.render(name, True, WHITE)
+        text_rect = text.get_rect(centerx=rect.centerx, y=rect.y + 5)
+        self.screen.blit(text, text_rect)
+
+        # Stats
+        stats_y = rect.y + 40
+
+        # ATK
+        atk_text = f"ATK: {card.get_effective_atk()}"
+        color = RED if card.current_atk < card.base_atk else WHITE
+        text = self.font.render(atk_text, True, color)
+        self.screen.blit(text, (rect.x + 10, stats_y))
+
+        # DUR
+        dur_text = f"DUR: {card.current_dur}"
+        color = RED if card.current_dur < card.base_dur else WHITE
+        text = self.font.render(dur_text, True, color)
+        self.screen.blit(text, (rect.x + 10, stats_y + 30))
+
+        # SPD
+        spd_text = f"SPD: {card.current_spd}"
+        text = self.font.render(spd_text, True, WHITE)
+        self.screen.blit(text, (rect.x + 10, stats_y + 60))
+
+        # Boucliers
+        if card.shields > 0:
+            shield_text = f"🛡 {card.shields}"
+            text = self.font.render(shield_text, True, LIGHT_GRAY)
+            self.screen.blit(text, (rect.x + 10, stats_y + 90))
+
+        # Statuts
+        status_y = rect.bottom - 25
+        status_x = rect.x + 5
+        for status, value in card.permanent_statuses.items():
+            if value > 0:
+                # Icône de statut
+                status_colors = {
+                    StatusEffect.VENIN: GREEN,
+                    StatusEffect.BRULURE: ORANGE,
+                    StatusEffect.SAIGNEMENT: RED,
+                    StatusEffect.FRACTURE: LIGHT_GRAY,
+                    StatusEffect.MALEDICTION: PURPLE,
+                    StatusEffect.EROSION: (100, 100, 50)
+                }
+                color = status_colors.get(status, WHITE)
+                pygame.draw.circle(self.screen, color, (status_x, status_y), 8)
+
+                # Valeur
+                text = self.small_font.render(str(value), True, WHITE)
+                self.screen.blit(text, (status_x - 3, status_y - 8))
+
+                status_x += 20
+
+    def draw_hand_card(self, rect: pygame.Rect, card: Card):
+        """Dessine une carte dans la main"""
+        # Fond
+        color = card.color
+        pygame.draw.rect(self.screen, color, rect, border_radius=10)
+        pygame.draw.rect(self.screen, WHITE, rect, 3, border_radius=10)
+
+        # Coût
+        cost_rect = pygame.Rect(rect.x + 5, rect.y + 5, 25, 25)
+        pygame.draw.circle(self.screen, BLUE, (rect.x + 17, rect.y + 17), 12)
+        cost_text = self.font.render(str(card.cost), True, WHITE)
+        cost_text_rect = cost_text.get_rect(center=(rect.x + 17, rect.y + 17))
+        self.screen.blit(cost_text, cost_text_rect)
+
+        # Nom
+        name = card.name[:10] + "..." if len(card.name) > 10 else card.name
+        text = self.small_font.render(name, True, WHITE)
+        text_rect = text.get_rect(centerx=rect.centerx, y=rect.y + 35)
+        self.screen.blit(text, text_rect)
+
+        # Stats
+        stats_text = f"{card.get_effective_atk()}/{card.current_dur}/{card.current_spd}"
+        text = self.font.render(stats_text, True, WHITE)
+        text_rect = text.get_rect(centerx=rect.centerx, y=rect.y + 60)
+        self.screen.blit(text, text_rect)
+
+        # Description
+        desc_lines = []
+        if card.description:
+            words = card.description.split()
+            line = ""
+            for word in words:
+                if len(line + word) < 15:
+                    line += word + " "
+                else:
+                    desc_lines.append(line.strip())
+                    line = word + " "
+            if line:
+                desc_lines.append(line.strip())
+
+        y = rect.y + 90
+        for line in desc_lines[:3]:
+            text = self.small_font.render(line, True, LIGHT_GRAY)
+            text_rect = text.get_rect(centerx=rect.centerx, y=y)
+            self.screen.blit(text, text_rect)
+            y += 18
+
+        # Si carte non jouable (pas assez d'énergie)
+        if self.combat_state and card.cost > self.combat_state.energy:
+            overlay = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 128))
+            self.screen.blit(overlay, rect)
+
+    def draw_victory(self):
+        """Dessine l'écran de victoire"""
+        self.screen.fill(DARK_GRAY)
+
+        # Animation d'étoiles
+        for i in range(50):
+            x = random.randint(0, SCREEN_WIDTH)
+            y = random.randint(0, SCREEN_HEIGHT)
+            pygame.draw.circle(self.screen, WHITE, (x, y), 1)
+
+        # Titre
+        title = self.big_font.render("VICTOIRE!", True, GOLD)
+        title_rect = title.get_rect(center=(SCREEN_WIDTH // 2, 200))
+        self.screen.blit(title, title_rect)
+
+        subtitle = self.font.render("Vous avez survécu aux 10 combats!", True, WHITE)
+        subtitle_rect = subtitle.get_rect(center=(SCREEN_WIDTH // 2, 260))
+        self.screen.blit(subtitle, subtitle_rect)
+
+        # Instructions
+        text = self.font.render("Appuyez sur ESPACE pour retourner au menu", True, LIGHT_GRAY)
+        text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, 400))
+        self.screen.blit(text, text_rect)
+
+    def draw_defeat(self):
+        """Dessine l'écran de défaite"""
+        self.screen.fill(DARK_GRAY)
+
+        # Titre
+        title = self.big_font.render("DÉFAITE", True, RED)
+        title_rect = title.get_rect(center=(SCREEN_WIDTH // 2, 200))
+        self.screen.blit(title, title_rect)
+
+        subtitle = self.font.render(f"Vous avez atteint le combat {self.stage}", True, WHITE)
+        subtitle_rect = subtitle.get_rect(center=(SCREEN_WIDTH // 2, 260))
+        self.screen.blit(subtitle, subtitle_rect)
+
+        # Instructions
+        text = self.font.render("Appuyez sur ESPACE pour retourner au menu", True, LIGHT_GRAY)
+        text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, 400))
+        self.screen.blit(text, text_rect)
+
+    def draw_particles(self):
+        """Dessine les particules"""
+        for particle in self.particles:
+            alpha = int(255 * particle['life'])
+            color = (*particle['color'], alpha)
+            size = int(particle['size'] * particle['life'])
+            if size > 0:
+                pygame.draw.circle(self.screen, particle['color'],
+                                   (int(particle['x']), int(particle['y'])),
+                                   size)
+
+    def draw(self):
+        """Dessine l'écran selon l'état"""
+        if self.state == "menu":
+            self.draw_menu()
+        elif self.state == "combat":
+            self.draw_combat()
+        elif self.state == "victory":
+            self.draw_victory()
+        elif self.state == "defeat":
+            self.draw_defeat()
+
+        # Particules par-dessus tout
+        self.draw_particles()
+
+        pygame.display.flip()
+
+    def update(self, dt):
+        """Met à jour la logique du jeu"""
+        self.animation_timer += dt
+
+        # Mettre à jour les particules
+        self.update_particles(dt)
+
+    def run(self):
+        """Boucle principale du jeu"""
+        while self.running:
+            dt = self.clock.tick(FPS) / 1000.0
+
+            self.handle_events()
+            self.update(dt)
+            self.draw()
+
+        pygame.quit()
+
+
+# ============================================================================
+# POINT D'ENTRÉE
+# ============================================================================
+
+if __name__ == "__main__":
+    print("""
+    ╔══════════════════════════════════════════╗
+    ║         BESTIAIRE: Écorces & Échos      ║
+    ║              Version 1.0.0               ║
+    ║                                          ║
+    ║     Roguelite Deckbuilding Permanent    ║
+    ╚══════════════════════════════════════════╝
+
+    CONTRÔLES:
+    - Drag & Drop les cartes de la main vers le plateau
+    - ENTRÉE ou bouton : Fin du tour
+    - ESPACE : Confirmer / Nouvelle partie
+    - ESC : Retour au menu
+
+    RÈGLES:
+    - Les dégâts sont PERMANENTS pour toute la run
+    - Survivez à 10 combats pour gagner
+    - Le dernier combat est un BOSS
+    """)
+
+    game = BestiaireGame()
+    game.run()
