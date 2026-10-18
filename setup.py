@@ -38,7 +38,7 @@ setup(
     description="Bestiaire: Écorces & Échos - Roguelite deckbuilding avec attrition permanente",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/studio-ecorces/bestiaire",
+    url="https://github.com/goldaj/roguelite-bestiary-deckbuilder",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 4 - Beta",

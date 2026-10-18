@@ -25,15 +25,15 @@
 ### Méthode 1: Exécutable (Recommandé)
 
 Téléchargez la dernière version pour votre OS:
-- [Windows](https://github.com/studio-ecorces/bestiaire/releases/latest/download/bestiaire-windows.zip)
-- [macOS](https://github.com/studio-ecorces/bestiaire/releases/latest/download/bestiaire-macos.zip)
-- [Linux](https://github.com/studio-ecorces/bestiaire/releases/latest/download/bestiaire-linux.tar.gz)
+- [Windows](https://github.com/goldaj/roguelite-bestiary-deckbuilder/releases/latest/download/bestiaire-windows.zip)
+- [macOS](https://github.com/goldaj/roguelite-bestiary-deckbuilder/releases/latest/download/bestiaire-macos.zip)
+- [Linux](https://github.com/goldaj/roguelite-bestiary-deckbuilder/releases/latest/download/bestiaire-linux.tar.gz)
 
 ### Méthode 2: Depuis les Sources
 
 ```bash
 # Cloner le repository
-git clone https://github.com/studio-ecorces/bestiaire.git
+git clone https://github.com/goldaj/roguelite-bestiary-deckbuilder.git
 cd bestiaire
 
 # Créer un environnement virtuel
