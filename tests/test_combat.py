@@ -172,12 +172,6 @@ class TestIntegrationCombat:
         # Vérifier que le combat s'est bien déroulé
         assert len(resolver.action_log) > 0
 
-        # Au moins une créature doit avoir pris des dégâts
-        damaged = False
-        for field in [state.player_field, state.enemy_field]:
-            for card in field:
-                if card and card.current_dur < card.base_dur:
-                    damaged = True
-                    break
-
-        assert damaged is True
+        # Les créatures mortes sont retirées du terrain : leur disparition
+        # ne signifie pas que le moteur n'a pas appliqué de dégâts.
+        assert any("subit" in line for line in resolver.action_log)
