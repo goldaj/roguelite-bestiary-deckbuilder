@@ -11,7 +11,7 @@ python -m pip install -r requirements.txt
 python bestiaire_game.py
 ```
 
-Le prototype autonome utilise le glisser-déposer des cartes, Entrée pour finir un tour, Espace pour confirmer et Échap pour revenir au menu. `main.py` contient un écran d'accueil expérimental distinct.
+Le prototype autonome utilise le glisser-déposer des cartes, Entrée pour finir un tour, Espace pour confirmer et Échap pour revenir au menu. Il charge les 90 cartes du catalogue commun, repioche jusqu'à cinq cartes à chaque tour (dans la limite du deck restant), conserve les blessures des créatures entre les combats et ajoute une carte capturée à chaque victoire d'étape. Les effets `on_attack` du catalogue sont appliqués ; les autres compétences spéciales ne sont pas toutes intégrées à ce prototype. `main.py` contient un écran d'accueil expérimental distinct.
 
 ## Explorer le code
 
@@ -22,7 +22,7 @@ Le prototype autonome utilise le glisser-déposer des cartes, Entrée pour finir
 
 Pour lancer les tests : `python -m pip install pytest hypothesis`, puis `python -m pytest tests`.
 
-Vérification du 18 octobre 2026 : le prototype autonome s'initialise avec le pilote vidéo Pygame de test ; la suite existante compte 25 tests réussis et 7 échecs dans les systèmes de progression. Ces échecs restent à corriger ; le dépôt présente donc un travail en cours.
+Historique : le 18 octobre 2026, la suite comptait 25 tests réussis et 7 échecs de progression. Après les correctifs sur `chatgpt/review-20261024`, **50 tests réussissent sur GitHub Actions le 24 octobre 2026**, incluant le lancement Pygame sans affichage, les boutiques, les récompenses et les sauvegardes. Il reste du travail sur la totalité des compétences, l'équilibrage et les parcours d'interface.
 
 Le projet reste en développement. Les anciens documents de conception décrivent aussi des pistes futures et des exemples de distribution ; ils ne constituent pas une annonce de version publiée. Les environnements, caches, paramètres IDE et sauvegardes personnelles restent sur le poste et sont ignorés par Git.
 
