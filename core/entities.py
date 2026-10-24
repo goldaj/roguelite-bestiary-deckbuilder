@@ -194,9 +194,13 @@ class CombatState:
 
     def is_combat_over(self) -> Optional[bool]:
         """Vérifie si le combat est terminé. Retourne True si victoire, False si défaite."""
-        if self.get_presence(False) == 0:
+        player_alive = self.get_presence(True) > 0
+        enemy_alive = self.get_presence(False) > 0
+        if not player_alive and not enemy_alive:
+            return None  # Plateau vide / égalité : ni victoire ni défaite.
+        if not enemy_alive:
             return True
-        if self.get_presence(True) == 0:
+        if not player_alive:
             return False
         return None
 
