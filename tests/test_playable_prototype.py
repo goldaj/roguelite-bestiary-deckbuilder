@@ -97,3 +97,31 @@ def test_defeat_ends_run_without_loot(game):
     game.end_turn()
     assert game.state == "defeat"
     assert len(game.player_deck) == before
+
+
+def test_front_guard_intercepts_rear_target(game):
+    by_id = {card.id: card for card in game.cards}
+    guard = by_id["forest_ivy_boar"].clone()
+    attacker = by_id["dunes_solar_fennec"].clone()
+    rear = by_id["forest_spine_frog"].clone()
+    state = CombatState()
+    state.add_unit(attacker, 2, True)
+    state.add_unit(guard, 0, False)
+    state.add_unit(rear, 2, False)
+    assert state.find_target(state.player_board[2]).card is guard
+
+
+def test_carapace_shield_blunts_first_attack(game):
+    from bestiaire_game import Card, Keyword
+    attacker = Card("attacker", "Attacker", 1, 4, 5, 2)
+    defender = Card("defender", "Defender", 1, 2, 4, 1, [Keyword.CARAPACE])
+    state = CombatState()
+    assert state.add_unit(attacker, 0, True)
+    assert state.add_unit(defender, 0, False)
+    assert defender.shields == 1
+    state.attack(state.player_board[0], state.enemy_board[0])
+    assert defender.shields == 0
+    assert defender.current_dur == 4
+    assert attacker.current_atk == 3
+    state.attack(state.player_board[0], state.enemy_board[0])
+    assert defender.current_dur == 1
