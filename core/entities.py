@@ -221,14 +221,16 @@ class RunState:
     score: int = 0
 
     def process_node_rewards(self, rewards: Dict):
-        """Traite les récompenses d'un nœud"""
+        """Ajoute réellement les récompenses de combat à la run."""
+        card_ids = rewards.get('cards', [])
+        database = CardDatabase() if card_ids else None
+        # Pré-valider toutes les cartes : ne pas créditer une récompense partielle
+        # si une référence du loot est invalide.
+        cards = [database.create_card(card_id) for card_id in card_ids]
         self.fragments += rewards.get('fragments', 0)
         self.genes += rewards.get('genes', 0)
         self.eggs += rewards.get('eggs', 0)
-
-        for card_id in rewards.get('cards', []):
-            # Ajouter la carte au deck
-            pass
+        self.current_deck.extend(cards)
 
     def save_to_dict(self) -> Dict:
         """Sauvegarde l'état de la run"""
