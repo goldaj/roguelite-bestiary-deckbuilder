@@ -7,6 +7,7 @@ from enum import Enum, auto
 import json
 import random
 from copy import deepcopy
+from pathlib import Path
 
 
 class Rarity(Enum):
@@ -250,49 +251,28 @@ class CardDatabase:
         self.load_cards()
 
     def load_cards(self):
-        """Charge toutes les cartes depuis le JSON"""
-        # Les données des 100 cartes seront dans cards.json
-        # Pour l'instant, créons quelques exemples
+        """Charge le catalogue réel plutôt qu'un échantillon codé en dur."""
+        catalog_path = Path(__file__).resolve().parents[1] / "data" / "cards.json"
+        with catalog_path.open("r", encoding="utf-8") as handle:
+            source = json.load(handle)["cards"]
 
-        self.cards = {
-            "forest_spine_frog": {
-                "name": "Grenouille Épineuse",
-                "biome": Biome.FORET,
-                "rarity": Rarity.COMMON,
-                "cost": 1,
-                "atk": 1,
-                "dur": 3,
-                "spd": 2,
-                "keywords": [Keyword.TIRAILLEUR],
-                "on_attack": [],
-                "description": "Punition d'invocations"
-            },
-            "forest_azure_spider": {
-                "name": "Mygale d'Azur",
-                "biome": Biome.FORET,
-                "rarity": Rarity.COMMON,
-                "cost": 1,
-                "atk": 1,
-                "dur": 4,
-                "spd": 1,
-                "keywords": [],
-                "on_attack": [{"effect": StatusEffect.VENIN, "value": 1}],
-                "description": "Attrition lente"
-            },
-            "dunes_solar_fennec": {
-                "name": "Fennec Solaire",
-                "biome": Biome.DUNES,
-                "rarity": Rarity.COMMON,
-                "cost": 1,
-                "atk": 2,
-                "dur": 2,
-                "spd": 3,
-                "keywords": [],
-                "on_attack": [],
-                "description": "Initiative haute"
-            },
-            # Plus de cartes seront ajoutées depuis cards.json
-        }
+        self.cards = {}
+        for card_id, raw in source.items():
+            data = raw.copy()
+            data["biome"] = Biome(raw["biome"])
+            data["rarity"] = Rarity(raw["rarity"])
+            data["keywords"] = [Keyword[name] for name in raw.get("keywords", [])]
+            for field_name in ("on_attack", "on_deploy", "on_hit", "on_death"):
+                # Les effets du JSON utilisent leurs noms, le moteur attend l'Enum.
+                data[field_name] = []
+                for raw_effect in raw.get(field_name, []):
+                    effect = raw_effect.copy()
+                    if isinstance(effect.get("effect"), str):
+                        effect_name = effect["effect"]
+                        if effect_name in StatusEffect.__members__:
+                            effect["effect"] = StatusEffect[effect_name]
+                    data[field_name].append(effect)
+            self.cards[card_id] = data
 
     def create_card(self, card_id: str) -> Card:
         """Crée une instance de carte depuis l'ID"""
@@ -312,10 +292,10 @@ class CardDatabase:
             keywords=set(data.get("keywords", []))
         )
 
-        card.on_attack = data.get("on_attack", [])
-        card.on_deploy = data.get("on_deploy", [])
-        card.on_hit = data.get("on_hit", [])
-        card.on_death = data.get("on_death", [])
+        card.on_attack = deepcopy(data.get("on_attack", []))
+        card.on_deploy = deepcopy(data.get("on_deploy", []))
+        card.on_hit = deepcopy(data.get("on_hit", []))
+        card.on_death = deepcopy(data.get("on_death", []))
 
         return card
 
