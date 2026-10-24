@@ -331,6 +331,8 @@ class EventSystem:
             return {}
 
         event = self.events[event_id]
+        if not 0 <= choice < len(event["choices"]):
+            raise ValueError(f"Choix invalide pour {event_id}: {choice}")
         chosen = event["choices"][choice]
         effect = chosen["effect"]
 
@@ -379,16 +381,25 @@ class EventSystem:
         if act >= 3:
             rarities.append(Rarity.EPIC)
 
+        # Privilégier une rareté accessible à l'acte et un vrai ID du catalogue.
         rarity = random.choice(rarities)
-        # Filtrer les cartes par rareté
-        # Retourner une carte aléatoire
-        return self.card_db.create_card("forest_spine_frog")  # Placeholder
+        candidates = [
+            card_id for card_id, data in self.card_db.cards.items()
+            if data["rarity"] == rarity and data["rarity"] != Rarity.LEGENDARY
+        ]
+        if not candidates:
+            candidates = [
+                card_id for card_id, data in self.card_db.cards.items()
+                if data["rarity"] == Rarity.COMMON
+            ]
+        return self.card_db.create_card(random.choice(candidates))
 
 
 class MerchantSystem:
     """Système de marchand"""
 
-    def __init__(self):
+    def __init__(self, card_db: Optional[CardDatabase] = None):
+        self.card_db = card_db or CardDatabase()
         self.base_prices = {
             Rarity.COMMON: 15,
             Rarity.UNCOMMON: 25,
@@ -467,8 +478,23 @@ class MerchantSystem:
         # Ajuster le prix selon l'acte
         price = int(price * (1 + 0.1 * (act - 1)))
 
+        candidates = [
+            card_id for card_id, data in self.card_db.cards.items()
+            if data["biome"] == biome and data["rarity"] == selected_rarity
+        ]
+        # La rareté tirée peut être absente d'un biome donné.
+        if not candidates:
+            candidates = [
+                card_id for card_id, data in self.card_db.cards.items()
+                if data["biome"] == biome
+            ]
+        if not candidates:
+            candidates = list(self.card_db.cards)
+        card_id = rng.choice(candidates)
+        selected_rarity = self.card_db.cards[card_id]["rarity"]
+        price = int(self.base_prices[selected_rarity] * (1 + 0.1 * (act - 1)))
         return {
-            "card_id": f"{biome.value}_sample",  # À remplacer par vraie génération
+            "card_id": card_id,
             "rarity": selected_rarity,
             "price": price
         }
@@ -602,8 +628,14 @@ class MetaProgression:
         self.profile["trophies"] += trophies
         run_state.trophies = trophies
 
-        # Débloquer de nouvelles cartes
+        # Débloquer de nouvelles cartes et récompenser le premier acte final.
         self.unlock_cards(run_state)
+        if victory and run_state.current_act >= 3:
+            if "first_victory" not in self.profile["achievements"]:
+                self.profile["achievements"].append("first_victory")
+                for card_id in ("variant_mist_scythe", "variant_styx_mastiff"):
+                    if card_id not in self.profile["unlocked_cards"]:
+                        self.profile["unlocked_cards"].append(card_id)
 
         self.save_profile()
 
@@ -649,11 +681,9 @@ class MetaProgression:
                         self.profile["unlocked_cards"].append(card_id)
                         unlocks.append(card_id)
 
-        # Débloquer selon les achievements
-        if victory and run_state.current_act >= 3:
-            if "first_victory" not in self.profile["achievements"]:
-                self.profile["achievements"].append("first_victory")
-                unlocks.extend(["variant_mist_scythe", "variant_styx_mastiff"])
+        # Les achievements de victoire ne sont attribués qu'à complete_run,
+        # qui connaît explicitement l'issue de la partie.
+        # unlock_cards ne doit pas dépendre d'une variable locale inexistante.
 
         return unlocks
 
