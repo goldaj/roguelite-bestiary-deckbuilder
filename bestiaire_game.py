@@ -207,6 +207,9 @@ class CombatState:
         """Ajoute une unité sur le terrain"""
         board = self.player_board if is_player else self.enemy_board
         if board[position] is None:
+            # Carapace begins protected; the first incoming blow can blunt its attacker.
+            if Keyword.CARAPACE in card.keywords and card.shields == 0:
+                card.shields = 1
             board[position] = CombatUnit(card, position, is_player)
             return True
         return False
@@ -252,36 +255,40 @@ class CombatState:
         self.energy = ENERGY_PER_TURN
 
     def find_target(self, attacker: CombatUnit) -> Optional[CombatUnit]:
-        """Trouve une cible pour l'attaquant"""
-        targets = self.enemy_board if attacker.is_player else self.player_board
+        """Target opposing units; a front-row Guard intercepts attacks on the rear."""
+        opposing = self.enemy_board if attacker.is_player else self.player_board
+        living = [unit for unit in opposing if unit and unit.card.current_dur > 0]
+        if not living:
+            return None
 
-        # Bond - cible le plus faible
         if Keyword.BOND in attacker.card.keywords:
-            weakest = None
-            for target in targets:
-                if target and target.card.current_dur > 0:
-                    if not weakest or target.card.current_dur < weakest.card.current_dur:
-                        weakest = target
-            return weakest
+            target = min(living, key=lambda unit: unit.card.current_dur)
+        else:
+            direct = opposing[attacker.position] if attacker.position < len(opposing) else None
+            target = direct if direct and direct.card.current_dur > 0 else living[0]
 
-        # Cible standard - en face
-        if attacker.position < len(targets):
-            target = targets[attacker.position]
-            if target and target.card.current_dur > 0:
-                return target
-
-        # Première cible disponible
-        for target in targets:
-            if target and target.card.current_dur > 0:
-                return target
-
-        return None
+        # Two front slots, two rear slots in the playable four-slot prototype.
+        if target.position >= BOARD_SLOTS // 2 and Keyword.PERCEE not in attacker.card.keywords:
+            guard = next((unit for unit in living
+                          if unit.position < BOARD_SLOTS // 2
+                          and Keyword.GARDE in unit.card.keywords), None)
+            if guard:
+                return guard
+        return target
 
     def attack(self, attacker: CombatUnit, defender: CombatUnit):
         """Effectue une attaque"""
         damage = attacker.card.get_effective_atk()
 
-        # Percée ignore les boucliers
+        # Carapace uses a shield to blunt the attacking creature.
+        if (Keyword.CARAPACE in defender.card.keywords
+                and defender.card.shields > 0
+                and Keyword.PERCEE not in attacker.card.keywords):
+            defender.card.shields -= 1
+            attacker.card.current_atk = max(1, attacker.card.current_atk - 1)
+            self.combat_log.append(f"{defender.card.name} active Carapace !")
+            return
+        # Percée ignores shields, otherwise normal damage and shield absorption.
         if Keyword.PERCEE in attacker.card.keywords:
             defender.card.current_dur -= damage
         else:
