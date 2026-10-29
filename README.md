@@ -38,3 +38,7 @@ Le projet reste en développement. Les anciens documents de conception décriven
 | [Idle Clicker](https://github.com/goldaj/idle-clicker-tkinter) | Clics, revenus et achats avec coût dynamique | Interface de bureau Tkinter/ttkbootstrap |
 
 Ces dépôts conservent des expériences distinctes, à différents niveaux d'avancement.
+
+## Choix de récompense après combat (branche de revue)
+
+La branche `feat/meaningful-card-rewards-20261029`, empilée sur la PR de corrections #1, ajoute un **draft jouable de trois cartes** après chaque victoire intermédiaire. Chaque joueur peut choisir une carte pour son deck ou passer, plutôt que recevoir un ajout aléatoire obligatoire. Contrôles : souris, touches 1/2/3, S ou Échap pour passer. Au moins une proposition coûte au plus 3 énergie. Voir [docs/REWARD_DRAFT.md](docs/REWARD_DRAFT.md), tests de règles et limites d'équilibrage.

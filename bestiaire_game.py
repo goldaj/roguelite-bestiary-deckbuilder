@@ -367,6 +367,7 @@ class BestiaireGame:
         self.combat_state: Optional[CombatState] = None
         self.stage = 1
         self.max_stages = 10
+        self.reward_options: List[Card] = []
 
         # Variables UI
         self.selected_card: Optional[int] = None
@@ -385,6 +386,7 @@ class BestiaireGame:
             self.player_deck.append(card)
 
         self.stage = 1
+        self.reward_options = []
         self.start_combat()
 
     def start_combat(self):
@@ -430,8 +432,14 @@ class BestiaireGame:
                 if event.key == pygame.K_ESCAPE:
                     if self.state == "combat":
                         self.state = "menu"
+                    elif self.state == "reward":
+                        self.select_reward(None)
                     else:
                         self.running = False
+                elif self.state == "reward" and event.key in (pygame.K_1, pygame.K_2, pygame.K_3):
+                    self.select_reward(event.key - pygame.K_1)
+                elif self.state == "reward" and event.key == pygame.K_s:
+                    self.select_reward(None)
 
                 elif event.key == pygame.K_SPACE:
                     if self.state == "menu":
@@ -460,6 +468,15 @@ class BestiaireGame:
             new_game_rect = pygame.Rect(SCREEN_WIDTH // 2 - 150, 300, 300, 60)
             if new_game_rect.collidepoint(pos):
                 self.start_new_run()
+
+        elif self.state == "reward":
+            for index in range(len(self.reward_options)):
+                if self.reward_rect(index).collidepoint(pos):
+                    self.select_reward(index)
+                    return
+            if self.reward_skip_rect().collidepoint(pos):
+                self.select_reward(None)
+            return
 
         elif self.state == "combat":
             # Sélection de carte dans la main
@@ -524,15 +541,51 @@ class BestiaireGame:
             if self.stage > self.max_stages:
                 self.state = "victory"
             else:
-                # Récompense réelle après chaque combat, pas un placeholder.
-                reward = random.choice(self.cards).clone()
-                self.player_deck.append(reward)
-                self.start_combat()
-                self.combat_state.combat_log.append(f"Carte capturée : {reward.name}")
+                # Stop on a real player choice instead of forcing a random card.
+                self.reward_options = self.generate_reward_options()
+                # A resolved fight must not keep stale hand/draw references, in
+                # particular creatures that have died and left the persistent deck.
+                self.hand = []
+                self.draw_pile = []
+                self.selected_card = None
+                self.state = "reward"
         elif result == "defeat":
             self.state = "defeat"
         else:
             self.draw_cards(HAND_SIZE_INITIAL - len(self.hand))
+
+    def generate_reward_options(self) -> List[Card]:
+        """One accessible card plus two distinct alternatives, no automatic grant."""
+        affordable = [card for card in self.cards if card.cost <= ENERGY_PER_TURN]
+        if not affordable:
+            affordable = list(self.cards)
+        if not affordable:
+            return []
+        first = random.choice(affordable)
+        remaining = [card for card in self.cards if card.id != first.id]
+        choices = [first] + random.sample(remaining, min(2, len(remaining)))
+        random.shuffle(choices)
+        return [card.clone() for card in choices]
+
+    def select_reward(self, index: Optional[int]) -> bool:
+        """Choose one card or skip; no mutation for invalid/duplicate selections."""
+        if self.state != "reward":
+            return False
+        if index is not None and (type(index) is not int or not 0 <= index < len(self.reward_options)):
+            return False
+        if index is not None:
+            self.player_deck.append(self.reward_options[index].clone())
+        self.reward_options = []
+        self.start_combat()
+        return True
+
+    @staticmethod
+    def reward_rect(index: int) -> pygame.Rect:
+        return pygame.Rect(175 + index * 310, 210, 270, 255)
+
+    @staticmethod
+    def reward_skip_rect() -> pygame.Rect:
+        return pygame.Rect(SCREEN_WIDTH // 2 - 135, 525, 270, 52)
 
     def get_hand_card_rect(self, index: int) -> pygame.Rect:
         """Retourne le rectangle d'une carte dans la main"""
@@ -826,6 +879,32 @@ class BestiaireGame:
             overlay.fill((0, 0, 0, 128))
             self.screen.blit(overlay, rect)
 
+    def draw_reward(self):
+        """Offer an explicit choice of up to three cards, including skip."""
+        self.screen.fill(DARK_GRAY)
+        title = self.big_font.render(f"Victoire ! Étape {self.stage} : choisissez une carte", True, GOLD)
+        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 90)))
+        instruction = self.small_font.render("Cliquez une carte, utilisez 1/2/3 ou S pour passer.", True, WHITE)
+        self.screen.blit(instruction, instruction.get_rect(center=(SCREEN_WIDTH // 2, 140)))
+        for index, card in enumerate(self.reward_options):
+            rect = self.reward_rect(index)
+            pygame.draw.rect(self.screen, card.color, rect, border_radius=12)
+            pygame.draw.rect(self.screen, GOLD, rect, 3, border_radius=12)
+            fields = [
+                (self.font, f"{index + 1}. {card.name[:23]}", 34),
+                (self.font, f"Coût : {card.cost}", 84),
+                (self.font, f"ATQ {card.current_atk} · DUR {card.current_dur} · VIT {card.current_spd}", 128),
+                (self.small_font, card.description[:50], 180),
+            ]
+            for font, text, offset in fields:
+                display = font.render(text, True, WHITE)
+                self.screen.blit(display, display.get_rect(center=(rect.centerx, rect.y + offset)))
+        skip = self.reward_skip_rect()
+        pygame.draw.rect(self.screen, MID_GRAY, skip, border_radius=8)
+        pygame.draw.rect(self.screen, WHITE, skip, 2, border_radius=8)
+        label = self.font.render("Passer (S)", True, WHITE)
+        self.screen.blit(label, label.get_rect(center=skip.center))
+
     def draw_victory(self):
         """Dessine l'écran de victoire"""
         self.screen.fill(DARK_GRAY)
@@ -885,6 +964,8 @@ class BestiaireGame:
             self.draw_menu()
         elif self.state == "combat":
             self.draw_combat()
+        elif self.state == "reward":
+            self.draw_reward()
         elif self.state == "victory":
             self.draw_victory()
         elif self.state == "defeat":
