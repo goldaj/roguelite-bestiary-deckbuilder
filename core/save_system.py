@@ -1,12 +1,13 @@
 # core/save_system.py
 """Système de sauvegarde et de chargement complet"""
 
+import binascii
 import json
 import pickle
 import zlib
 import base64
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, asdict
 from datetime import datetime
 import hashlib
@@ -161,7 +162,12 @@ class SaveManager:
                 if not save_data:
                     return None
             else:
-                save_data = self._read_save_file(save_path)
+                try:
+                    save_data = self._read_save_file(save_path)
+                except (OSError, ValueError, EOFError, zlib.error, binascii.Error):
+                    save_data = self._restore_from_backup(run_id)
+                    if not save_data:
+                        return None
 
         # Vérifier l'intégrité
         if self.enable_checksums:
@@ -466,7 +472,10 @@ class SaveManager:
     def _restore_from_backup(self, run_id: str) -> Optional[SaveData]:
         """Restaure depuis un backup"""
         # Chercher le backup le plus récent
-        backups = list(self.backup_dir.glob(f"*{run_id}*.bak"))
+        backups = [
+            path for path in self.backup_dir.glob(f"*{run_id}*.bak")
+            if not path.name.startswith("deleted_")
+        ]
 
         if not backups:
             return None
@@ -478,6 +487,10 @@ class SaveManager:
         for backup_path in backups:
             try:
                 save_data = self._read_save_file(backup_path)
+                if not self._check_version_compatibility(save_data.metadata.version):
+                    continue
+                if self.enable_checksums and not self._verify_checksum(save_data):
+                    continue
                 print(f"✅ Restauré depuis backup: {backup_path.name}")
                 return save_data
             except Exception as e:
@@ -542,9 +555,14 @@ class SaveManager:
                 print("❌ Version incompatible")
                 return None
 
-            # Générer un nouvel ID
+            # Générer un nouvel ID puis recalculer le checksum de l'export.
             new_id = self._generate_run_id()
+            if self.enable_checksums and not self._verify_checksum(save_data):
+                print("❌ Checksum invalide")
+                return None
             save_data.metadata.run_id = new_id
+            if self.enable_checksums:
+                save_data.metadata.checksum = self._calculate_checksum(save_data)
 
             # Sauvegarder
             save_path = self.runs_dir / f"{new_id}.sav"

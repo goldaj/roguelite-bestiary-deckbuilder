@@ -2,6 +2,7 @@
 """Tests pour le système de progression"""
 
 import pytest
+import random
 from pathlib import Path
 import tempfile
 import json

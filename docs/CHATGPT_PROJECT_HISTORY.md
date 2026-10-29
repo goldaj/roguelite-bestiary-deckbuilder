@@ -20,3 +20,28 @@
 **Manquent :** questions/réponses intégrales de chaque session de conception, horaires individuels de certains messages et échanges Codex non publiés. Ne jamais reconstituer un dialogue en prétendant citer des propos exacts.
 
 Lorsque des exports ChatGPT authentiques sont fournis, les archiver par session, avec date ISO/fuseau, rôles et texte intégral en préservant leur ordre. Revoir toute donnée sensible avant de pousser sur GitHub. Après chaque modification, ajouter les échanges exacts nouvellement disponibles, puis actualiser les décisions et l'état vérifié.
+
+## 2026-10-24 — Revue parallèle multi-dépôts (heure non disponible)
+
+**Utilisateur (verbatim, message visible dans cette conversation)** :
+
+> tu vois tout le boulot qu'on a fait sur la conversation Avancement projets codex ?
+> Tu vas refaire la même chose sur TOUT mon repo git. Tu vas commencer par les projets les plus gros, regarder ce que tu peux faire dessus et le faire sur ta branch (même consignes que sur l'autre conversation).
+> Tu vas ensuite me faire un rapport très succint des projets que t'as touché et de ce que t'as avancé dessus.
+> Amuse toi !
+
+**Assistant (résumé reconstruit, non verbatim)** : revue des gros dépôts et amélioration isolée sur `chatgpt/review-20261024`. Sauvegardes : import Tuple manquant, backup corrompu/effacé, checksum d'import recalculé et validé ; tests isolés et CI sans prétendre corriger les sept échecs existants.
+
+**Validation et confiance** : confiance moyenne sur la portée du changement ; aucune exécution locale des tests ne peut être attestée depuis l'accès GitHub disponible. Consulter les statuts GitHub Actions de la PR avant intégration. Aucune modification de `main`/`develop`, aucun déploiement. Codex doit inspecter le diff, relancer les tests et choisir les commits à intégrer sans écraser son travail.
+
+## 2026-10-24 — Bestiaire: correction et continuation du prototype jouable
+
+**Utilisateur (verbatim, heure de message non attestée)** : « je crois que ça a planté. Reprends là où tu t'es arrêté »
+
+**Utilisateur (résumé reconstruit, non verbatim)** : souhaite réduire les changements de structure et favoriser les corrections fonctionnelles et la poursuite des fonctions non terminées, dans des branches indépendantes que Codex peut choisir de reprendre ou non.
+
+**Assistant (résumé reconstruit, non verbatim)** : Le prototype Pygame autonome `bestiaire_game.py` charge désormais les 90 cartes du catalogue, les compétences `on_attack` existantes (au lieu de statuts aléatoires), une pioche limitée et renouvelée à chaque tour, les blessures conservées entre combats et une carte capturée en récompense après victoire. Garde et Carapace agissent au combat. Le moteur `core/` a aussi les captures/boutiques/loot et déblocages corrigés dans cette branche. Certaines capacités hors `on_attack` restent volontairement à réaliser.
+
+**Validation** : GitHub Actions du commit 7aca63801276c3410b8f57f5f6a79e5052e24fb8: 50 tests réussis le 24 octobre 2026, incluant des tests Pygame sans affichage. Aucun test humain approfondi d'équilibrage.
+
+**Handoff Codex** : lire les changements sur `chatgpt/review-20261024`, poursuivre les éléments non terminés, puis choisir sélectivement les commits utiles. Aucun merge sur la branche principale.

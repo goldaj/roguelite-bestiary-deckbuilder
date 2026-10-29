@@ -8,6 +8,7 @@ import pygame
 import random
 import math
 import json
+from copy import deepcopy
 from enum import Enum, auto
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple, Any
@@ -86,6 +87,7 @@ class Card:
     current_spd: int = 0
     shields: int = 0
     permanent_statuses: Dict[StatusEffect, int] = field(default_factory=dict)
+    on_attack: List[Dict] = field(default_factory=list)
 
     def __post_init__(self):
         if self.current_dur == 0:
@@ -135,6 +137,7 @@ class Card:
         new_card.current_spd = self.current_spd
         new_card.shields = self.shields
         new_card.permanent_statuses = self.permanent_statuses.copy()
+        new_card.on_attack = deepcopy(self.on_attack)
         return new_card
 
 
@@ -143,82 +146,35 @@ class Card:
 # ============================================================================
 
 def create_all_cards() -> List[Card]:
-    """Crée toutes les cartes du jeu"""
-    cards = [
-        # Forêt
-        Card("forest_frog", "Grenouille Épineuse", 1, 1, 3, 2,
-             [Keyword.TIRAILLEUR], "Punition d'invocations", (100, 150, 100)),
-        Card("forest_spider", "Mygale d'Azur", 1, 1, 4, 1,
-             [], "Venin à l'attaque", (100, 120, 150)),
-        Card("forest_mantis", "Mante Prédatrice", 2, 3, 3, 2,
-             [Keyword.PERCEE], "Contourne les boucliers", (120, 150, 100)),
-        Card("forest_toad", "Crapaud Toxique", 2, 1, 5, 1,
-             [], "Zone de danger", (80, 140, 80)),
-        Card("forest_boar", "Sanglier Lierre", 1, 2, 3, 1,
-             [Keyword.GARDE], "Ligne de front", (100, 120, 80)),
+    """Construit les cartes jouables depuis le catalogue partagé de 90 cartes."""
+    path = Path(__file__).resolve().parent / "data" / "cards.json"
+    with path.open("r", encoding="utf-8") as handle:
+        catalogue = json.load(handle)["cards"]
 
-        # Dunes
-        Card("dunes_fennec", "Fennec Solaire", 1, 2, 2, 3,
-             [], "Initiative haute", (200, 150, 100)),
-        Card("dunes_scorpion", "Scorpion des Braises", 1, 1, 3, 2,
-             [], "Brûlure à l'attaque", (180, 100, 80)),
-        Card("dunes_hyena", "Hyène Rieuse", 2, 3, 3, 2,
-             [], "Combo feu", (200, 130, 100)),
-        Card("dunes_sphinx", "Sphinx Érodant", 3, 3, 5, 2,
-             [], "Érosion permanente", (180, 150, 120)),
-
-        # Falaises
-        Card("cliffs_seagull", "Goéland Filou", 1, 1, 3, 3,
-             [Keyword.VOL, Keyword.TIRAILLEUR], "Punition d'invocs", (150, 150, 180)),
-        Card("cliffs_bat", "Chauve-Souris Écho", 1, 2, 2, 3,
-             [Keyword.ETHEREE], "Intouchable CAC", (120, 120, 160)),
-        Card("cliffs_hawk", "Harrier Gris", 2, 3, 3, 3,
-             [Keyword.VOL, Keyword.BOND], "Sniper mobile", (140, 140, 170)),
-
-        # Fleuve
-        Card("river_piranha", "Piranha Strié", 1, 2, 2, 3,
-             [], "Glass-cannon dégressif", (100, 120, 180)),
-        Card("river_lamprey", "Lamproie", 1, 1, 4, 1,
-             [], "Saignement à l'attaque", (80, 100, 160)),
-        Card("river_turtle", "Tortue de Vase", 1, 1, 5, 1,
-             [Keyword.CARAPACE], "Mur vivant", (100, 140, 160)),
-        Card("river_catfish", "Silure Noir", 2, 3, 3, 1,
-             [], "Synergie saignement", (80, 80, 140)),
-
-        # Volcan
-        Card("volcano_gecko", "Gekko Fumarole", 1, 2, 2, 3,
-             [], "Adaptatif terrain lave", (180, 100, 100)),
-        Card("volcano_mastiff", "Molosse Cendreux", 1, 2, 3, 2,
-             [], "Standard feu", (160, 80, 80)),
-        Card("volcano_salamander", "Salamandre Sombre", 2, 2, 4, 2,
-             [], "Timing bouclier", (140, 60, 60)),
-        Card("volcano_dragon", "Dragon Cendré", 3, 4, 6, 2,
-             [Keyword.VOL], "Propagation lente", (200, 50, 50)),
-
-        # Ruines
-        Card("ruins_rat", "Rat des Cryptes", 1, 2, 2, 2,
-             [Keyword.TIRAILLEUR], "Flex", (150, 100, 180)),
-        Card("ruins_gargoyle", "Gargouille Fissurée", 1, 1, 4, 1,
-             [], "Malédiction à l'attaque", (140, 100, 170)),
-        Card("ruins_specter", "Spectre Archiviste", 1, 1, 3, 2,
-             [Keyword.ETHEREE], "Synergie malédiction", (160, 120, 200)),
-        Card("ruins_golem", "Golem Érodé", 2, 3, 4, 1,
-             [], "Usure hors combat", (130, 90, 160)),
-
-        # Neutres
-        Card("neutral_sparrow", "Moineau Hargneux", 0, 1, 1, 3,
-             [Keyword.VOL, Keyword.TIRAILLEUR], "Filler agressif", (140, 140, 140)),
-        Card("neutral_rat", "Rat Éclaireur", 0, 1, 2, 3,
-             [], "Tempo micro", (120, 120, 120)),
-        Card("neutral_dog", "Chien Errant", 1, 2, 2, 2,
-             [Keyword.BOND], "Presse la faiblesse", (130, 130, 130)),
-        Card("neutral_crab", "Crabe de Rivage", 1, 1, 3, 1,
-             [Keyword.CARAPACE], "Mur low-cost", (100, 100, 120)),
-        Card("neutral_wolf", "Loup Solitaire", 2, 3, 3, 2,
-             [], "Minimalisme", (110, 110, 110)),
-        Card("neutral_crow", "Corbeau de Carogne", 2, 2, 3, 3,
-             [Keyword.BOND], "Finisher", (80, 80, 80)),
-    ]
+    palette = {
+        "forest": (92, 145, 97),
+        "dunes": (190, 145, 94),
+        "cliffs": (118, 135, 177),
+        "river": (77, 124, 170),
+        "volcano": (178, 83, 84),
+        "ruins": (141, 104, 153),
+        "neutral": (128, 135, 135),
+    }
+    cards = []
+    for card_id, data in catalogue.items():
+        abilities = []
+        for effect in data.get("on_attack", []):
+            if isinstance(effect.get("effect"), str) and effect["effect"] in StatusEffect.__members__:
+                abilities.append({"effect": StatusEffect[effect["effect"]],
+                                  "value": effect.get("value", 1),
+                                  "self": effect.get("self", False)})
+        cards.append(Card(
+            card_id, data["name"], data["cost"], data["atk"], data["dur"], data["spd"],
+            [Keyword[name] for name in data.get("keywords", [])],
+            data.get("description", ""),
+            palette[data["biome"]],
+            on_attack=abilities,
+        ))
     return cards
 
 
@@ -251,6 +207,9 @@ class CombatState:
         """Ajoute une unité sur le terrain"""
         board = self.player_board if is_player else self.enemy_board
         if board[position] is None:
+            # Carapace begins protected; the first incoming blow can blunt its attacker.
+            if Keyword.CARAPACE in card.keywords and card.shields == 0:
+                card.shields = 1
             board[position] = CombatUnit(card, position, is_player)
             return True
         return False
@@ -296,36 +255,40 @@ class CombatState:
         self.energy = ENERGY_PER_TURN
 
     def find_target(self, attacker: CombatUnit) -> Optional[CombatUnit]:
-        """Trouve une cible pour l'attaquant"""
-        targets = self.enemy_board if attacker.is_player else self.player_board
+        """Target opposing units; a front-row Guard intercepts attacks on the rear."""
+        opposing = self.enemy_board if attacker.is_player else self.player_board
+        living = [unit for unit in opposing if unit and unit.card.current_dur > 0]
+        if not living:
+            return None
 
-        # Bond - cible le plus faible
         if Keyword.BOND in attacker.card.keywords:
-            weakest = None
-            for target in targets:
-                if target and target.card.current_dur > 0:
-                    if not weakest or target.card.current_dur < weakest.card.current_dur:
-                        weakest = target
-            return weakest
+            target = min(living, key=lambda unit: unit.card.current_dur)
+        else:
+            direct = opposing[attacker.position] if attacker.position < len(opposing) else None
+            target = direct if direct and direct.card.current_dur > 0 else living[0]
 
-        # Cible standard - en face
-        if attacker.position < len(targets):
-            target = targets[attacker.position]
-            if target and target.card.current_dur > 0:
-                return target
-
-        # Première cible disponible
-        for target in targets:
-            if target and target.card.current_dur > 0:
-                return target
-
-        return None
+        # Two front slots, two rear slots in the playable four-slot prototype.
+        if target.position >= BOARD_SLOTS // 2 and Keyword.PERCEE not in attacker.card.keywords:
+            guard = next((unit for unit in living
+                          if unit.position < BOARD_SLOTS // 2
+                          and Keyword.GARDE in unit.card.keywords), None)
+            if guard:
+                return guard
+        return target
 
     def attack(self, attacker: CombatUnit, defender: CombatUnit):
         """Effectue une attaque"""
         damage = attacker.card.get_effective_atk()
 
-        # Percée ignore les boucliers
+        # Carapace uses a shield to blunt the attacking creature.
+        if (Keyword.CARAPACE in defender.card.keywords
+                and defender.card.shields > 0
+                and Keyword.PERCEE not in attacker.card.keywords):
+            defender.card.shields -= 1
+            attacker.card.current_atk = max(1, attacker.card.current_atk - 1)
+            self.combat_log.append(f"{defender.card.name} active Carapace !")
+            return
+        # Percée ignores shields, otherwise normal damage and shield absorption.
         if Keyword.PERCEE in attacker.card.keywords:
             defender.card.current_dur -= damage
         else:
@@ -333,12 +296,13 @@ class CombatState:
 
         self.combat_log.append(f"{attacker.card.name} attaque {defender.card.name} pour {damage} dégâts!")
 
-        # Appliquer les effets
-        if random.random() < 0.3:  # 30% de chance d'appliquer un statut
-            effects = list(StatusEffect)
-            effect = random.choice(effects)
-            defender.card.apply_status(effect, 1)
-            self.combat_log.append(f"{defender.card.name} reçoit {effect.value}!")
+        # Les effets ne sont pas arbitraires : ils suivent la fiche de la carte.
+        for effect in attacker.card.on_attack:
+            target = attacker.card if effect.get("self") else defender.card
+            target.apply_status(effect["effect"], max(0, int(effect["value"])))
+            self.combat_log.append(
+                f"{target.name} reçoit {effect['effect'].value} ({effect['value']})!"
+            )
 
     def cleanup_dead_units(self):
         """Enlève les unités mortes"""
@@ -399,6 +363,7 @@ class BestiaireGame:
         self.player_deck: List[Card] = []
         self.enemy_deck: List[Card] = []
         self.hand: List[Card] = []
+        self.draw_pile: List[Card] = []
         self.combat_state: Optional[CombatState] = None
         self.stage = 1
         self.max_stages = 10
@@ -443,12 +408,12 @@ class BestiaireGame:
             enemy_card.current_dur += self.stage
             self.combat_state.add_unit(enemy_card, i, False)
 
-        # Piocher la main initiale
+        # Une créature n'est ni dupliquée par la pioche, ni ressuscitée
+        # après sa destruction. Les cartes encore en main restent disponibles.
         self.hand = []
-        deck_copy = self.player_deck.copy()
-        random.shuffle(deck_copy)
-        for i in range(min(HAND_SIZE_INITIAL, len(deck_copy))):
-            self.hand.append(deck_copy[i])
+        self.draw_pile = [card for card in self.player_deck if card.current_dur > 0]
+        random.shuffle(self.draw_pile)
+        self.draw_cards(HAND_SIZE_INITIAL)
 
         # Log
         self.combat_state.combat_log.append(f"=== Combat {self.stage} {'(BOSS)' if is_boss else ''} ===")
@@ -540,26 +505,34 @@ class BestiaireGame:
                     self.hover_slot = i
                     break
 
+    def draw_cards(self, count: int):
+        """Pioche uniquement les cartes encore disponibles dans ce combat."""
+        while count > 0 and self.draw_pile and len(self.hand) < HAND_SIZE_INITIAL:
+            self.hand.append(self.draw_pile.pop())
+            count -= 1
+
     def end_turn(self):
-        """Termine le tour du joueur"""
+        """Résout le combat, attribue le butin et remplit la main."""
         if self.state != "combat":
             return
-
-        # Résoudre le combat
         self.combat_state.resolve_combat_turn()
-
-        # Vérifier la fin du combat
         result = self.combat_state.is_combat_over()
         if result == "victory":
+            # Les blessures et destructions demeurent à l'étape suivante.
+            self.player_deck = [card for card in self.player_deck if card.current_dur > 0]
             self.stage += 1
             if self.stage > self.max_stages:
                 self.state = "victory"
             else:
-                # Prochainement, on affichera une carte
-                # Pour l'instant, on lance directement le combat suivant
+                # Récompense réelle après chaque combat, pas un placeholder.
+                reward = random.choice(self.cards).clone()
+                self.player_deck.append(reward)
                 self.start_combat()
+                self.combat_state.combat_log.append(f"Carte capturée : {reward.name}")
         elif result == "defeat":
             self.state = "defeat"
+        else:
+            self.draw_cards(HAND_SIZE_INITIAL - len(self.hand))
 
     def get_hand_card_rect(self, index: int) -> pygame.Rect:
         """Retourne le rectangle d'une carte dans la main"""

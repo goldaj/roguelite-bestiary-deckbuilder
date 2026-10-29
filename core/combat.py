@@ -316,9 +316,14 @@ class CombatResolver:
         return rewards
 
     def _generate_reward_card(self) -> str:
-        """Génère une carte comme récompense"""
-        # Logique pour générer une carte appropriée au biome/acte
-        return "forest_spine_frog"  # Placeholder
+        """Tire un ID réel de carte commune ou peu commune pour la run."""
+        from core.entities import CardDatabase
+        catalogue = CardDatabase()
+        pool = [
+            card_id for card_id, data in catalogue.cards.items()
+            if data["rarity"] in (Rarity.COMMON, Rarity.UNCOMMON)
+        ]
+        return self.rng.choice(pool)
 
     def draw_cards(self, count: int):
         """Pioche des cartes du deck vers la main"""
