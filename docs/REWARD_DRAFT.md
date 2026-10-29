@@ -42,3 +42,8 @@ python bestiaire_game.py
 - Ne pas lire ni publier des sauvegardes personnelles ; aucune connexion réseau ni collection de données utilisateurs n'est introduite.
 
 **État des preuves :** code et tests engagés, validation à constater via GitHub Actions. Aucun test graphique manuel certifié dans cette intervention.
+
+
+## CI complète du dépôt : régression puis correction
+
+Premier run de la suite intégrale : 54 tests réussis, 2 échecs. L'ancien test `test_end_turn_refills_hand_and_captures_new_card` attendait une récompense automatique désormais supprimée ; il a été réécrit pour vérifier l'état `reward`, la décision du joueur et la carte réellement ajoutée. L'autre échec, `test_dead_cards_are_not_revived_on_next_stage`, a révélé des références persistantes à des créatures détruites dans `hand` et `draw_pile` pendant le nouvel écran. Le moteur vide désormais les piles du combat achevé avant le choix ; `start_combat` les reconstruit ensuite à partir du deck survivant. Les tests historiques ne sont pas désactivés. Recontrôler le nouveau run CI avant de fusionner.
