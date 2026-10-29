@@ -1,0 +1,23 @@
+name: Bestiaire card reward choice
+on:
+  pull_request:
+  push:
+    branches: [develop, 'feat/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  reward-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Test real reward flow and clicks without pygame display
+        run: python -m unittest discover -s tests -p 'test_card_reward_choice.py' -v
+      - name: Compile game source
+        run: python -m py_compile bestiaire_game.py
