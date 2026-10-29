@@ -13,6 +13,7 @@ from enum import Enum, auto
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple, Any
 from pathlib import Path
+from core.starter_decks import ARCHETYPES, DESCRIPTIONS, starting_deck
 
 # ============================================================================
 # CONFIGURATION
@@ -377,14 +378,11 @@ class BestiaireGame:
         # Particules
         self.particles: List[Dict] = []
 
-    def start_new_run(self):
-        """Démarre une nouvelle run"""
-        # Créer le deck du joueur (10 cartes aléatoires)
-        self.player_deck = []
-        for _ in range(12):
-            card = random.choice(self.cards).clone()
-            self.player_deck.append(card)
-
+    def start_new_run(self, archetype: str = "equilibre"):
+        """Choose a twelve-card starter plan instead of twelve unrelated draws."""
+        templates = starting_deck(self.cards, archetype, energy=ENERGY_PER_TURN)
+        self.player_deck = [card.clone() for card in templates]
+        self.starter_archetype = archetype
         self.stage = 1
         self.reward_options = []
         self.start_combat()
@@ -436,6 +434,8 @@ class BestiaireGame:
                         self.select_reward(None)
                     else:
                         self.running = False
+                elif self.state == "menu" and event.key in (pygame.K_1, pygame.K_2, pygame.K_3):
+                    self.start_new_run(ARCHETYPES[event.key - pygame.K_1])
                 elif self.state == "reward" and event.key in (pygame.K_1, pygame.K_2, pygame.K_3):
                     self.select_reward(event.key - pygame.K_1)
                 elif self.state == "reward" and event.key == pygame.K_s:
@@ -443,7 +443,7 @@ class BestiaireGame:
 
                 elif event.key == pygame.K_SPACE:
                     if self.state == "menu":
-                        self.start_new_run()
+                        self.start_new_run("equilibre")
                     elif self.state in ["victory", "defeat"]:
                         self.state = "menu"
 
@@ -464,10 +464,10 @@ class BestiaireGame:
     def handle_click(self, pos):
         """Gère les clics"""
         if self.state == "menu":
-            # Bouton nouvelle partie
-            new_game_rect = pygame.Rect(SCREEN_WIDTH // 2 - 150, 300, 300, 60)
-            if new_game_rect.collidepoint(pos):
-                self.start_new_run()
+            for index, archetype in enumerate(ARCHETYPES):
+                if self.starter_rect(index).collidepoint(pos):
+                    self.start_new_run(archetype)
+                    return
 
         elif self.state == "reward":
             for index in range(len(self.reward_options)):
@@ -635,51 +635,44 @@ class BestiaireGame:
             if particle['life'] <= 0:
                 self.particles.remove(particle)
 
+    @staticmethod
+    def starter_rect(index: int) -> pygame.Rect:
+        return pygame.Rect(SCREEN_WIDTH // 2 - 240, 280 + index * 84, 480, 72)
+
     def draw_menu(self):
-        """Dessine le menu principal"""
+        """Select a starting archetype; all three remain affordable and varied."""
         self.screen.fill(DARK_GRAY)
-
-        # Titre
         title = self.big_font.render("BESTIAIRE", True, WHITE)
-        title_rect = title.get_rect(center=(SCREEN_WIDTH // 2, 150))
-        self.screen.blit(title, title_rect)
-
+        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 125)))
         subtitle = self.font.render("Écorces & Échos", True, LIGHT_GRAY)
-        subtitle_rect = subtitle.get_rect(center=(SCREEN_WIDTH // 2, 200))
-        self.screen.blit(subtitle, subtitle_rect)
+        self.screen.blit(subtitle, subtitle.get_rect(center=(SCREEN_WIDTH // 2, 175)))
 
-        # Bouton nouvelle partie
-        button_rect = pygame.Rect(SCREEN_WIDTH // 2 - 150, 300, 300, 60)
-        pygame.draw.rect(self.screen, GREEN, button_rect, border_radius=10)
-        pygame.draw.rect(self.screen, WHITE, button_rect, 3, border_radius=10)
+        prompt = self.font.render("Choisis ton deck de départ", True, WHITE)
+        self.screen.blit(prompt, prompt.get_rect(center=(SCREEN_WIDTH // 2, 232)))
+        for index, archetype in enumerate(ARCHETYPES):
+            button = self.starter_rect(index)
+            color = (74, 113, 88) if archetype == "equilibre" else (
+                (143, 76, 66) if archetype == "assaut" else (66, 91, 143))
+            pygame.draw.rect(self.screen, color, button, border_radius=10)
+            pygame.draw.rect(self.screen, WHITE, button, 2, border_radius=10)
+            heading = self.font.render(f"{index + 1}. {DESCRIPTIONS[archetype]}", True, WHITE)
+            self.screen.blit(heading, heading.get_rect(center=(button.centerx, button.centery)))
 
-        button_text = self.font.render("NOUVELLE PARTIE", True, WHITE)
-        button_text_rect = button_text.get_rect(center=button_rect.center)
-        self.screen.blit(button_text, button_text_rect)
-
-        # Instructions
-        instructions = [
-            "Chaque dégât est permanent pour toute la run",
-            "Survivez à 10 combats pour gagner",
-            "Le dernier combat est un BOSS",
-            "",
-            "ESC - Retour au menu",
-            "ENTRÉE - Fin du tour"
-        ]
-
-        y = 450
-        for line in instructions:
-            text = self.small_font.render(line, True, LIGHT_GRAY)
-            text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, y))
-            self.screen.blit(text, text_rect)
-            y += 25
+        for index, text in enumerate((
+            "12 créatures différentes, dont au moins 8 coûtent 2 énergie ou moins",
+            "Les blessures restent permanentes pendant les 10 combats",
+            "Clic ou 1/2/3 pour choisir  ·  ESPACE : Équilibré",
+        )):
+            note = self.small_font.render(text, True, LIGHT_GRAY)
+            self.screen.blit(note, note.get_rect(center=(SCREEN_WIDTH // 2, 570 + 29 * index)))
 
     def draw_combat(self):
         """Dessine le combat"""
         self.screen.fill(DARK_GRAY)
 
         # Infos du combat
-        stage_text = f"Combat {self.stage}/{self.max_stages}"
+        archetype = getattr(self, "starter_archetype", "equilibre")
+        stage_text = f"Combat {self.stage}/{self.max_stages} · {DESCRIPTIONS.get(archetype, 'Équilibré')}"
         if self.stage == self.max_stages:
             stage_text += " (BOSS)"
             color = GOLD
