@@ -543,6 +543,11 @@ class BestiaireGame:
             else:
                 # Stop on a real player choice instead of forcing a random card.
                 self.reward_options = self.generate_reward_options()
+                # A resolved fight must not keep stale hand/draw references, in
+                # particular creatures that have died and left the persistent deck.
+                self.hand = []
+                self.draw_pile = []
+                self.selected_card = None
                 self.state = "reward"
         elif result == "defeat":
             self.state = "defeat"
