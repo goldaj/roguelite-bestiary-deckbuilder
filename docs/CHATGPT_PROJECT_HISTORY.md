@@ -52,3 +52,8 @@ Lorsque des exports ChatGPT authentiques sont fournis, les archiver par session,
 - Après consultation de la PR #1 Bestiaire et des branches, la nouvelle branche empilée `feat/meaningful-card-rewards-20261029` modifie réellement `bestiaire_game.py` : remplacer une carte automatiquement tirée et ajoutée au deck par trois choix distincts ou possibilité de passer, avec transition vers le combat suivant.
 - Une option accessible au budget énergétique de base est garantie. Tests de la vraie classe sans GUI : effets de choix, skip, clics, progression et boss final. Workflow Python 3.10/3.12 ajouté ; succès à établir par ses journaux. Aucun test manuel graphique ou bilan statistique d'équilibrage n'a été réalisé.
 - Lire `docs/REWARD_DRAFT.md` et ne pas fusionner dans `develop` avant la PR parent #1.
+
+
+## CI complète du dépôt : régression puis correction
+
+Premier run de la suite intégrale : 54 tests réussis, 2 échecs. L'ancien test `test_end_turn_refills_hand_and_captures_new_card` attendait une récompense automatique désormais supprimée ; il a été réécrit pour vérifier l'état `reward`, la décision du joueur et la carte réellement ajoutée. L'autre échec, `test_dead_cards_are_not_revived_on_next_stage`, a révélé des références persistantes à des créatures détruites dans `hand` et `draw_pile` pendant le nouvel écran. Le moteur vide désormais les piles du combat achevé avant le choix ; `start_combat` les reconstruit ensuite à partir du deck survivant. Les tests historiques ne sont pas désactivés. Recontrôler le nouveau run CI avant de fusionner.
