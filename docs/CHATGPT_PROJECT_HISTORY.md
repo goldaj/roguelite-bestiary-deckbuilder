@@ -45,3 +45,10 @@ Lorsque des exports ChatGPT authentiques sont fournis, les archiver par session,
 **Validation** : GitHub Actions du commit 7aca63801276c3410b8f57f5f6a79e5052e24fb8: 50 tests réussis le 24 octobre 2026, incluant des tests Pygame sans affichage. Aucun test humain approfondi d'équilibrage.
 
 **Handoff Codex** : lire les changements sur `chatgpt/review-20261024`, poursuivre les éléments non terminés, puis choisir sélectivement les commits utiles. Aucun merge sur la branche principale.
+
+## 2026-10-29 — trois récompenses de cartes au choix (résumé non verbatim)
+
+- L'utilisateur attend une progression GitHub continue, fonctionnelle et documentée ; préférence antérieure pour l'équilibrage mesuré des jeux.
+- Après consultation de la PR #1 Bestiaire et des branches, la nouvelle branche empilée `feat/meaningful-card-rewards-20261029` modifie réellement `bestiaire_game.py` : remplacer une carte automatiquement tirée et ajoutée au deck par trois choix distincts ou possibilité de passer, avec transition vers le combat suivant.
+- Une option accessible au budget énergétique de base est garantie. Tests de la vraie classe sans GUI : effets de choix, skip, clics, progression et boss final. Workflow Python 3.10/3.12 ajouté ; succès à établir par ses journaux. Aucun test manuel graphique ou bilan statistique d'équilibrage n'a été réalisé.
+- Lire `docs/REWARD_DRAFT.md` et ne pas fusionner dans `develop` avant la PR parent #1.
