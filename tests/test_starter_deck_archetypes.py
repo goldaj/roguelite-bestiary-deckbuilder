@@ -42,6 +42,7 @@ class StarterDeckTests(unittest.TestCase):
     def test_new_run_integrates_selected_template_clones(self):
         game = self.module.BestiaireGame.__new__(self.module.BestiaireGame)
         game.cards = self.catalogue
+        game.max_stages = 10
         game.start_new_run("rempart")
         self.assertEqual(game.starter_archetype, "rempart")
         self.assertEqual(game.state, "combat")
@@ -56,6 +57,7 @@ class StarterDeckTests(unittest.TestCase):
         for index, kind in enumerate(ARCHETYPES):
             game = self.module.BestiaireGame.__new__(self.module.BestiaireGame)
             game.cards = self.catalogue
+            game.max_stages = 10
             game.state = "menu"
             rect = game.starter_rect(index)
             game.handle_click((rect.x + 5, rect.y + 5))
