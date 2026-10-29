@@ -58,7 +58,7 @@ def test_draw_pile_is_finite_and_card_instances_are_not_duplicated(game):
     assert len({id(x) for x in game.hand + game.draw_pile}) == 11
 
 
-def test_end_turn_refills_hand_and_captures_new_card(game):
+def test_end_turn_refills_hand_and_offers_a_player_chosen_card(game):
     game.start_new_run()
     game.hand.pop()
     game.combat_state.player_hp = 999
@@ -73,10 +73,17 @@ def test_end_turn_refills_hand_and_captures_new_card(game):
     game.combat_state.enemy_hp = -1
     game.end_turn()
     assert game.stage == 2
-    assert len(game.player_deck) == before + 1
+    assert game.state == "reward"
+    assert len(game.player_deck) == before
     assert wounded in game.player_deck
     assert wounded.current_dur == wounded.base_dur - 1
-    assert any("Carte capturée" in line for line in game.combat_state.combat_log)
+    assert len(game.reward_options) == 3
+    picked_id = game.reward_options[0].id
+    assert game.select_reward(0) is True
+    assert game.state == "combat"
+    assert len(game.player_deck) == before + 1
+    assert game.player_deck[-1].id == picked_id
+    assert len(game.hand) == 5
 
 
 def test_dead_cards_are_not_revived_on_next_stage(game):
